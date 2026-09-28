@@ -22,8 +22,3 @@ class LLMClient:
         except Exception as error:  # noqa: BLE001
             print(f"\nLLM request failed: {error}\n")
             return None
-
-    def close(self):
-        """Close the OpenRouter client."""
-
-        self.client.close()
