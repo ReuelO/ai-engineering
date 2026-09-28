@@ -1,46 +1,26 @@
 # LLM CLI
 
-A minimal command-line AI application built with Python and OpenRouter.
+A bare-bones CLI chat app using Python and OpenRouter. 
 
-The project demonstrates the fundamental architecture of an LLM-powered application, including API authentication, conversation state, system prompts, error handling, and separation of application logic from the LLM integration.
+This is project #1 in the `ai-engineering` series. It's meant to show the absolute basics of how an LLM app actually works under the hood—handling API keys, keeping track of chat history, and keeping the LLM logic separate from the UI.
 
 ## Architecture
 
 ```text
-User
- │
- ▼
-Python CLI
- │
- ▼
-Conversation State
- │
- ▼
-LLM Client
- │
- ▼
-OpenRouter API
- │
- ▼
-LLM
- │
- ▼
-AI Response
+User → Python CLI → Conversation State → LLM Client → OpenRouter API → LLM
 ```
+*(It's just a loop: get input, format the context, call the API, print the response, repeat.)*
 
 ## Features
 
-- Interactive command-line chat
+- Interactive terminal chat
 - Multi-turn conversation history
-- Configurable system prompt
-- Configurable LLM model
-- Conversation reset with `/reset`
-- Exit with `/exit`
-- Basic API error handling
-- Environment-based configuration
-- Separate LLM client abstraction
+- Customizable system prompts and models
+- `/reset` to clear context, `/exit` to quit
+- Basic error handling so the app doesn't just crash if the API times out
+- Clean separation between the CLI logic and the LLM provider
 
-## Technologies
+## Tech Stack
 
 - Python
 - OpenRouter Python SDK
@@ -50,15 +30,15 @@ AI Response
 
 ```text
 01-llm-cli/
-├── main.py
-├── llm.py
+├── main.py          # CLI loop and user input
+├── llm.py           # API calls and LLM logic
 ├── README.md
 └── requirements.txt
 ```
 
 ## Configuration
 
-Create a `.env` file in the root of the `ai-engineering` repository:
+You'll need a `.env` file in the root of the `ai-engineering` repo. Grab an API key from OpenRouter and add it here:
 
 ```env
 OPENROUTER_API_KEY=your_api_key_here
@@ -66,63 +46,26 @@ OPENROUTER_MODEL=openrouter/free
 SYSTEM_PROMPT=You are a helpful AI engineering tutor. Explain technical concepts clearly and practically.
 ```
 
-Never commit your API key to Git.
+*(Obviously, don't commit this file to git.)*
 
 ## Running the Project
 
-From the repository root:
+Run it from the root of the repo:
 
 ```bash
 python projects/01-llm-cli/main.py
 ```
 
-Available commands:
+Once it's running, just start typing. Use `/reset` to clear the chat history or `/exit` to quit.
 
-```text
-/reset
-/exit
-```
+## How it Works
 
-## Concepts Demonstrated
+At its core, almost every LLM app is just a loop that sends a prompt + context to a model, then does something with the output. This project breaks that down into a few key concepts:
 
-### LLM API
+- **State management:** We keep a list of messages (`system`, `user`, `assistant`) and pass the relevant history with every request so the model remembers the conversation.
+- **Separation of concerns:** `main.py` handles the terminal loop, while `llm.py` handles the actual API calls. This makes it easy to swap out the provider or change the UI later without breaking everything.
+- **Graceful failures:** If the API throws an error, the app catches it and lets you try again instead of terminating.
 
-Python sends messages to an LLM through an API and receives a generated response.
+## What's Next?
 
-### Conversation State
-
-The application maintains a list of messages and sends the relevant history with each request.
-
-### Message Roles
-
-The project uses:
-
-- `system` — assistant instructions
-- `user` — user input
-- `assistant` — model responses
-
-### Separation of Concerns
-
-`main.py` manages the application while `llm.py` manages communication with the LLM provider.
-
-### Error Handling
-
-API failures are caught so that a failed request does not immediately terminate the application.
-
-## Learning Outcome
-
-This project establishes the basic pattern used by larger AI applications:
-
-```text
-Application
-    ↓
-Prompt + Context
-    ↓
-LLM
-    ↓
-Generated Output
-    ↓
-Application
-```
-
-Later projects will extend this architecture with structured output, embeddings, retrieval, tool calling, agents, evaluation, and production application patterns.
+This project establishes the baseline pattern we'll use for everything else. In later projects, we'll extend this exact same architecture to add structured output, embeddings, RAG, tool calling, and agents.
