@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Indexing and search engine files
+projects/03-semantic-search/data/index/
