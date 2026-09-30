@@ -1,26 +1,42 @@
+from dataclasses import dataclass
+
+from documents import DocumentChunk
 from embeddings import EmbeddingModel
 
 
+@dataclass
+class SearchResult:
+    """A ranked semantic search result."""
+
+    content: str
+    source: str
+    chunk_id: int
+    score: float
+
+
 class SemanticSearch:
-    """Search documents using embedding similarity."""
+    """Search document chunks using embedding similarity."""
 
     def __init__(self, embedder: EmbeddingModel):
         self.embedder = embedder
-        self.documents: list[str] = []
+        self.documents: list[DocumentChunk] = []
         self.embeddings = None
 
-    def index(self, documents: list[str]):
-        """Create embeddings for the document collection."""
+    def index(self, documents: list[DocumentChunk]):
+        """Create embeddings for document chunks."""
 
         self.documents = documents
-        self.embeddings = self.embedder.embed(documents)
+
+        texts = [document.content for document in documents]
+
+        self.embeddings = self.embedder.embed(texts)
 
     def search(
         self,
         query: str,
         top_k: int = 3,
-    ) -> list[tuple[str, float]]:
-        """Return the most similar documents."""
+    ) -> list[SearchResult]:
+        """Return the most similar document chunks."""
 
         query_embedding = self.embedder.embed([query])
 
@@ -35,8 +51,16 @@ class SemanticSearch:
 
         for index in ranked_indices[:top_k]:
             index = int(index)
-            score = float(similarities[index])
 
-            results.append((self.documents[index], score))
+            document = self.documents[index]
+
+            results.append(
+                SearchResult(
+                    content=document.content,
+                    source=document.source,
+                    chunk_id=document.chunk_id,
+                    score=float(similarities[index]),
+                )
+            )
 
         return results

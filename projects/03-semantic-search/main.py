@@ -11,7 +11,9 @@ documents = load_documents()
 search.index(documents)
 
 print("Semantic Search")
+print(f"Indexed {len(documents)} document chunks.")
 print("Type /exit to quit.\n")
+
 
 while True:
     query = input("Search: ").strip()
@@ -30,8 +32,11 @@ while True:
 
     print("\nResults:")
 
-    for document, score in results:
-        print(f"\nScore: {score:.4f}")
-        print(document[:300])
+    for result in results:
+        print(
+            f"\n[{result.source} | chunk {result.chunk_id} | score {result.score:.4f}]"
+        )
+
+        print(result.content)
 
     print()
