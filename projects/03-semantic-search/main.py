@@ -1,21 +1,29 @@
 from embeddings import EmbeddingModel
-
+from search import SemanticSearch
 
 embedder = EmbeddingModel()
 
-texts = [
+search = SemanticSearch(embedder)
+
+documents = [
     "Python functions allow code to be reused.",
-    "Functions in Python can accept parameters and return values.",
-    "A database stores and retrieves structured information.",
+    "Python lists store multiple values in a single collection.",
+    "SQL joins combine data from multiple database tables.",
+    "Linux provides a command-line environment for managing computers.",
+    "Machine learning allows computers to learn patterns from data.",
 ]
 
-embeddings = embedder.embed(texts)
+search.index(documents)
 
-print("Embedding shape:")
-print(embeddings.shape)
+query = input("Search: ").strip()
 
-print("\nFirst embedding:")
-print(embeddings[0])
+results = search.search(
+    query=query,
+    top_k=3,
+)
 
-print("\nNumber of dimensions:")
-print(len(embeddings[0]))
+print("\nResults:")
+
+for document, score in results:
+    print(f"\nScore: {score:.4f}")
+    print(document)
