@@ -17,6 +17,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 from documents import load_documents
 from embeddings import EmbeddingModel
 from evaluation.judge import RAGJudge
+from evidence import EvidenceGate
 from llm import RAGLLM
 from rag import RAGPipeline
 from search import SemanticSearch
@@ -25,6 +26,8 @@ INDEX_DIR = PROJECT_DIR / "data" / "index"
 QUESTIONS_FILE = PROJECT_DIR / "evaluation" / "questions.json"
 RESULTS_DIR = PROJECT_DIR / "evaluation" / "results"
 RESULTS_FILE = RESULTS_DIR / "latest.json"
+EVIDENCE_THRESHOLD = 0.50
+TOP_K = 3
 
 
 # Data Loading
@@ -40,7 +43,7 @@ def load_questions() -> list[dict]:
 
 # Search
 def build_search() -> SemanticSearch:
-    """Load the existing semantic search index."""
+    """Load an existing search index or build one."""
 
     embedder = EmbeddingModel()
 
@@ -81,21 +84,24 @@ def build_rag() -> RAGPipeline:
         model=model,
     )
 
+    evidence_gate = EvidenceGate(threshold=EVIDENCE_THRESHOLD)
+
     return RAGPipeline(
         search=search,
         llm=llm,
+        evidence_gate=evidence_gate,
     )
 
 
 # Context
 def build_context(results) -> str:
-    """Build LLM context from retrieved search results."""
+    """Build context from retrieved results."""
 
     parts = []
 
-    for result in results:
-        parts.append(f"Source: {result.source}\nContent: {result.content}")
-
+    parts.extend(
+        f"Source: {result.source}\nContent: {result.content}" for result in results
+    )
     return "\n\n".join(parts)
 
 
@@ -119,12 +125,20 @@ def main():
         model=model,
     )
 
-    # Evaluation metrics
+    # Overall metrics
     total = 0
-    grounded = 0
-    relevant = 0
-    correct = 0
-    total_score = 0
+
+    # Answerable questions
+    answerable_total = 0
+    answerable_passed_gate = 0
+    answerable_correct = 0
+    answerable_grounded = 0
+    answerable_relevant = 0
+    answerable_score_total = 0
+
+    # Unanswerable questions
+    unanswerable_total = 0
+    correctly_refused = 0
 
     # Detailed results
     results = []
@@ -132,28 +146,92 @@ def main():
     print("RAG Evaluation")
     print("=" * 60)
 
+    print(f"Evidence threshold: {EVIDENCE_THRESHOLD:.2f}")
+
+    print(f"Top-k: {TOP_K}")
+
+    # Evaluate each question
     for number, item in enumerate(
         questions,
         start=1,
     ):
         question = item["question"]
 
-        print(f"\n[{number}] {question}")
-
-        # Generate RAG answer
-        response = rag.answer(
-            question=question,
-            top_k=3,
+        expected_answerable = item.get(
+            "answerable",
+            True,
         )
 
-        if response is None:
-            print("RAG generation failed.")
+        total += 1
+
+        print(f"\n[{number}] {question}")
+
+        # Run RAG
+        response = rag.answer(
+            question=question,
+            top_k=TOP_K,
+        )
+
+        print(f"Evidence score: {response.evidence_score:.3f}")
+
+        print(f"Evidence sufficient: {response.evidence_sufficient}")
+
+        # Handle unanswerable questions
+        if not expected_answerable:
+            unanswerable_total += 1
+
+            refused = not response.evidence_sufficient
+
+            if refused:
+                correctly_refused += 1
+
+            print("Expected refusal: True")
+
+            print(f"Correctly refused: {refused}")
+
+            results.append(
+                {
+                    "question": question,
+                    "expected_answerable": False,
+                    "answer": response.answer,
+                    "sources": [source.source for source in response.sources],
+                    "evidence_score": (response.evidence_score),
+                    "evidence_sufficient": (response.evidence_sufficient),
+                    "correctly_refused": refused,
+                }
+            )
+
             continue
 
-        # Build context for judge
+        # Handle answerable questions
+        answerable_total += 1
+
+        if response.evidence_sufficient:
+            answerable_passed_gate += 1
+
+        # If the gate incorrectly rejects an answerable question,
+        # there is no answer to send to the judge.
+        if not response.evidence_sufficient:
+            print("\nFAIL: Answerable question was rejected by the evidence gate.")
+
+            results.append(
+                {
+                    "question": question,
+                    "expected_answerable": True,
+                    "answer": response.answer,
+                    "sources": [source.source for source in response.sources],
+                    "evidence_score": (response.evidence_score),
+                    "evidence_sufficient": False,
+                    "evaluation": None,
+                }
+            )
+
+            continue
+
+        # Build context
         context = build_context(response.sources)
 
-        # Evaluate answer
+        # Judge answer
         evaluation = judge.evaluate(
             question=question,
             context=context,
@@ -162,29 +240,40 @@ def main():
 
         if evaluation is None:
             print("Judge evaluation failed.")
+
+            results.append(
+                {
+                    "question": question,
+                    "expected_answerable": True,
+                    "answer": response.answer,
+                    "sources": [source.source for source in response.sources],
+                    "evidence_score": (response.evidence_score),
+                    "evidence_sufficient": True,
+                    "evaluation": None,
+                }
+            )
+
             continue
 
-        # Update metrics
-        total += 1
+        # Update answer metrics
+        if evaluation.correct:
+            answerable_correct += 1
 
         if evaluation.grounded:
-            grounded += 1
+            answerable_grounded += 1
 
         if evaluation.relevant:
-            relevant += 1
+            answerable_relevant += 1
 
-        if evaluation.correct:
-            correct += 1
+        answerable_score_total += evaluation.score
 
-        total_score += evaluation.score
-
-        # Display result
+        # Display answer evaluation
         print(f"\nAnswer:\n{response.answer}")
 
         print("\nSources:")
 
         for source in response.sources:
-            print(f"- {source.source}")
+            print(f"- {source.source} (score: {source.score:.3f})")
 
         print("\nEvaluation:")
         print(f"Grounded: {evaluation.grounded}")
@@ -193,39 +282,81 @@ def main():
         print(f"Score: {evaluation.score}/5")
         print(f"Reasoning: {evaluation.reasoning}")
 
-        # Store detailed result
+        # Store result
         results.append(
             {
                 "question": question,
+                "expected_answerable": True,
                 "answer": response.answer,
                 "sources": [source.source for source in response.sources],
-                "grounded": evaluation.grounded,
-                "relevant": evaluation.relevant,
-                "correct": evaluation.correct,
-                "score": evaluation.score,
-                "reasoning": evaluation.reasoning,
+                "evidence_score": (response.evidence_score),
+                "evidence_sufficient": (response.evidence_sufficient),
+                "evaluation": {
+                    "grounded": (evaluation.grounded),
+                    "relevant": (evaluation.relevant),
+                    "correct": (evaluation.correct),
+                    "score": (evaluation.score),
+                    "reasoning": (evaluation.reasoning),
+                },
             }
         )
 
-    # Evaluation Summary
+    # Summary
     print("\n")
     print("=" * 60)
     print("RAG Evaluation Summary")
     print("=" * 60)
 
-    if total == 0:
-        print("No evaluations completed.")
-        return
+    print(f"Total questions: {total}")
 
-    print(f"Questions evaluated: {total}")
+    # Answerable summary
+    print("\nAnswerable questions:")
 
-    print(f"Grounded: {grounded}/{total} ({grounded / total:.1%})")
+    print(f"  Total: {answerable_total}")
 
-    print(f"Relevant: {relevant}/{total} ({relevant / total:.1%})")
+    if answerable_total > 0:
+        print(
+            f"  Passed evidence gate: "
+            f"{answerable_passed_gate}/"
+            f"{answerable_total} "
+            f"({answerable_passed_gate / answerable_total:.1%})"
+        )
 
-    print(f"Correct: {correct}/{total} ({correct / total:.1%})")
+        print(
+            f"  Correct: "
+            f"{answerable_correct}/"
+            f"{answerable_total} "
+            f"({answerable_correct / answerable_total:.1%})"
+        )
 
-    print(f"Average score: {total_score / total:.2f}/5")
+        print(
+            f"  Grounded: "
+            f"{answerable_grounded}/"
+            f"{answerable_total} "
+            f"({answerable_grounded / answerable_total:.1%})"
+        )
+
+        print(
+            f"  Relevant: "
+            f"{answerable_relevant}/"
+            f"{answerable_total} "
+            f"({answerable_relevant / answerable_total:.1%})"
+        )
+
+        print(f"  Average score: {answerable_score_total / answerable_total:.2f}/5")
+
+    # Unanswerable summary
+    print("\nUnanswerable questions:")
+
+    print(f"  Total: {unanswerable_total}")
+
+    if unanswerable_total > 0:
+        print(
+            f"  Correctly refused: "
+            f"{correctly_refused}/"
+            f"{unanswerable_total} "
+            f"({correctly_refused / unanswerable_total:.1%})"
+        )
 
     # Save Results
     RESULTS_DIR.mkdir(

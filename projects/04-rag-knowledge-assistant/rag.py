@@ -1,56 +1,65 @@
 from dataclasses import dataclass
 
-from llm import RAGLLM
-from search import SearchResult, SemanticSearch
-
 
 @dataclass
 class RAGResponse:
-    """A generated answer and its supporting sources."""
-
     answer: str
-    sources: list[SearchResult]
+    sources: list
+    evidence_sufficient: bool
+    evidence_score: float
 
 
 class RAGPipeline:
-    """Retrieve relevant knowledge and generate an answer."""
+    """Retrieval-augmented generation pipeline."""
 
     def __init__(
         self,
-        search: SemanticSearch,
-        llm: RAGLLM,
+        search,
+        llm,
+        evidence_gate,
     ):
         self.search = search
         self.llm = llm
+        self.evidence_gate = evidence_gate
 
     def answer(
         self,
         question: str,
         top_k: int = 3,
-    ) -> RAGResponse | None:
-        """Retrieve context and generate an answer."""
+    ) -> RAGResponse:
+        """Answer only when sufficient evidence exists."""
 
         results = self.search.search(
             query=question,
             top_k=top_k,
         )
 
-        context_parts = []
+        decision = self.evidence_gate.evaluate(results)
 
-        for result in results:
-            context_parts.append(f"Source: {result.source}\nContent: {result.content}")
+        if not decision.sufficient:
+            return RAGResponse(
+                answer=(
+                    "I don't have enough information "
+                    "in my knowledge base to answer "
+                    "that question reliably."
+                ),
+                sources=results,
+                evidence_sufficient=False,
+                evidence_score=decision.score,
+            )
 
-        context = "\n\n".join(context_parts)
+        context = "\n\n".join(
+            (f"Source: {result.source}\n{result.content}") for result in results
+        )
 
-        answer = self.llm.generate(
+        answer = self.llm.answer(
             question=question,
             context=context,
         )
 
-        if answer is None:
-            return None
-
         return RAGResponse(
             answer=answer,
             sources=results,
+            evidence_sufficient=True,
+            evidence_score=decision.score,
         )
