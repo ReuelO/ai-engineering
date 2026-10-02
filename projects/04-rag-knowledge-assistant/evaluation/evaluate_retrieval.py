@@ -45,14 +45,28 @@ def build_search() -> SemanticSearch:
     return search
 
 
+def reciprocal_rank(
+    results,
+    expected_source: str,
+) -> float:
+    """Return the reciprocal rank of the expected source."""
+
+    for position, result in enumerate(results, start=1):
+        if result.source == expected_source:
+            return 1 / position
+
+    return 0.0
+
+
 def evaluate(
     search: SemanticSearch,
     questions: list[dict],
     top_k: int,
-) -> float:
-    """Calculate retrieval accuracy for a given top-k."""
+) -> tuple[float, float]:
+    """Calculate retrieval accuracy and MRR."""
 
     correct = 0
+    reciprocal_ranks = []
 
     for item in questions:
         question = item["question"]
@@ -68,7 +82,18 @@ def evaluate(
         if expected_source in sources:
             correct += 1
 
-    return correct / len(questions)
+        reciprocal_ranks.append(
+            reciprocal_rank(
+                results,
+                expected_source,
+            )
+        )
+
+    accuracy = correct / len(questions)
+
+    mrr = sum(reciprocal_ranks) / len(reciprocal_ranks)
+
+    return accuracy, mrr
 
 
 def main():
@@ -79,13 +104,17 @@ def main():
     print("=" * 60)
 
     for top_k in [1, 2, 3, 5]:
-        accuracy = evaluate(
+        accuracy, mrr = evaluate(
             search=search,
             questions=questions,
             top_k=top_k,
         )
 
-        print(f"top_k={top_k}: {accuracy:.1%}")
+        print(
+            f"top_k={top_k}: "
+            f"accuracy={accuracy:.1%}, "
+            f"MRR={mrr:.3f}"
+        )
 
 
 if __name__ == "__main__":
