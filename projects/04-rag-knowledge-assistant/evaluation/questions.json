@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What keyword is used to define a Python function?",
+    "expected_source": "python.txt"
+  },
+  {
+    "question": "What can Python functions return?",
+    "expected_source": "python.txt"
+  },
+  {
+    "question": "What does a SQL SELECT statement do?",
+    "expected_source": "sql.txt"
+  },
+  {
+    "question": "What is a primary key?",
+    "expected_source": "sql.txt"
+  },
+  {
+    "question": "What protocol provides reliable delivery of data?",
+    "expected_source": "networking.txt"
+  },
+  {
+    "question": "What does DNS translate?",
+    "expected_source": "networking.txt"
+  },
+  {
+    "question": "What command lists files in Linux?",
+    "expected_source": "linux.txt"
+  },
+  {
+    "question": "What are file permissions used for?",
+    "expected_source": "linux.txt"
+  },
+  {
+    "question": "What is supervised learning?",
+    "expected_source": "machine-learning.txt"
+  },
+  {
+    "question": "What does regression predict?",
+    "expected_source": "machine-learning.txt"
+  }
+]
